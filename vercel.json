@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd shared && npm run build && cd ../client && npm run build",
+  "buildCommand": "npm run build:vercel",
   "outputDirectory": "client/dist",
   "framework": null,
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
