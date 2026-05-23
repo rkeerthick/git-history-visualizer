@@ -1,9 +1,12 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react'
+import { Loader2 } from 'lucide-react'
 import { useRepoStore } from '@/store/repoStore'
-import { fetchCommitDetail, fetchGitHubCommitDetail } from '@/lib/api'
+import { fetchCommits, fetchCommitDetail, fetchGitHubCommits, fetchGitHubCommitDetail } from '@/lib/api'
 import { formatRelativeDate } from '@/lib/utils'
 import { filterCommits } from '@/lib/filterUtils'
 import type { CommitNode } from '@git-viz/shared'
+
+const PAGE_SIZE = 100
 
 const ROW_HEIGHT = 48
 const LANE_WIDTH = 20
@@ -90,13 +93,111 @@ function assignLanes(commits: CommitNode[]): Map<string, number> {
 export function CommitGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { commits, filter, repoPath, repoSource, setSelectedCommit } = useRepoStore()
+  const {
+    commits, filter, repoPath, repoSource, activeBranch,
+    setSelectedCommit, selectedCommit, appendCommits,
+  } = useRepoStore()
+  const [focusedIndex, setFocusedIndex] = useState(-1)
+
+  // Infinite scroll state
+  const loadingRef = useRef(false)
+  const hasMoreRef = useRef(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
 
   const displayCommits = useMemo(() => filterCommits(commits, filter), [commits, filter])
 
+  // Reset focus and scroll when filter changes
   useEffect(() => {
+    setFocusedIndex(-1)
     if (containerRef.current) containerRef.current.scrollTop = 0
   }, [filter])
+
+  // Reset pagination when repo or branch changes
+  useEffect(() => {
+    hasMoreRef.current = true
+    setHasMore(true)
+    loadingRef.current = false
+    setIsLoadingMore(false)
+  }, [repoPath, activeBranch])
+
+  const loadMore = useCallback(async () => {
+    if (loadingRef.current || !hasMoreRef.current || !repoPath) return
+    loadingRef.current = true
+    setIsLoadingMore(true)
+    try {
+      const next = repoSource === 'github'
+        ? await fetchGitHubCommits(repoPath, activeBranch, Math.floor(commits.length / PAGE_SIZE) + 1, PAGE_SIZE)
+        : await fetchCommits(repoPath, activeBranch, PAGE_SIZE, commits.length)
+      if (next.length < PAGE_SIZE) {
+        hasMoreRef.current = false
+        setHasMore(false)
+      }
+      if (next.length > 0) appendCommits(next)
+    } catch { /* ignore */ } finally {
+      loadingRef.current = false
+      setIsLoadingMore(false)
+    }
+  }, [repoPath, repoSource, activeBranch, commits.length, appendCommits])
+
+  // Attach scroll listener for infinite scroll
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    function onScroll() {
+      const { scrollTop, scrollHeight, clientHeight } = container!
+      if (scrollHeight - scrollTop - clientHeight < 400) loadMore()
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [loadMore])
+
+  // Open commit detail — shared by click and Enter key
+  const openCommit = useCallback(async (index: number) => {
+    const commit = displayCommits[index]
+    if (!commit || !repoPath) return
+    try {
+      const detail = repoSource === 'github'
+        ? await fetchGitHubCommitDetail(repoPath, commit.hash)
+        : await fetchCommitDetail(repoPath, commit.hash)
+      setSelectedCommit(detail)
+    } catch { /* ignore */ }
+  }, [displayCommits, repoPath, repoSource, setSelectedCommit])
+
+  // Keyboard navigation
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setFocusedIndex(prev => Math.min(prev + 1, displayCommits.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setFocusedIndex(prev => Math.max(prev - 1, 0))
+      } else if (e.key === 'Enter') {
+        if (focusedIndex >= 0) openCommit(focusedIndex)
+      } else if (e.key === 'Escape') {
+        setSelectedCommit(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [displayCommits.length, focusedIndex, openCommit, setSelectedCommit])
+
+  // Scroll to keep focused row visible
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || focusedIndex < 0) return
+    const rowTop = focusedIndex * ROW_HEIGHT
+    const rowBottom = rowTop + ROW_HEIGHT
+    if (rowTop < container.scrollTop) {
+      container.scrollTop = rowTop
+    } else if (rowBottom > container.scrollTop + container.clientHeight) {
+      container.scrollTop = rowBottom - container.clientHeight
+    }
+  }, [focusedIndex])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -120,6 +221,22 @@ export function CommitGraph() {
       const cx = lane * LANE_WIDTH + 16
       const cy = i * ROW_HEIGHT + ROW_HEIGHT / 2
       const color = COLORS[lane % COLORS.length]
+      const isSelected = selectedCommit?.hash === commit.hash
+      const isFocused = i === focusedIndex
+
+      // Selected row: filled highlight + left border
+      if (isSelected) {
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.12)'
+        ctx.fillRect(0, i * ROW_HEIGHT, canvas.width, ROW_HEIGHT)
+        ctx.fillStyle = '#6366f1'
+        ctx.fillRect(0, i * ROW_HEIGHT, 3, ROW_HEIGHT)
+      }
+      // Focused row (keyboard cursor): outline only
+      if (isFocused && !isSelected) {
+        ctx.strokeStyle = 'rgba(99, 102, 241, 0.5)'
+        ctx.lineWidth = 1
+        ctx.strokeRect(1, i * ROW_HEIGHT + 1, canvas.width - 2, ROW_HEIGHT - 2)
+      }
 
       commit.parents.forEach(parentHash => {
         const parentIdx = displayCommits.findIndex(c => c.hash === parentHash)
@@ -187,28 +304,20 @@ export function CommitGraph() {
       ctx.fillStyle = '#4b5563'
       ctx.fillText(formatRelativeDate(commit.timestamp), textX + 64, cy + 12)
     })
-  }, [displayCommits])
+  }, [displayCommits, selectedCommit, focusedIndex])
 
-  async function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
+  function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     if (!repoPath || displayCommits.length === 0) return
     const canvas = canvasRef.current
     if (!canvas) return
 
     const rect = canvas.getBoundingClientRect()
-    const y = e.clientY - rect.top + (containerRef.current?.scrollTop ?? 0)
+    const y = e.clientY - rect.top
     const index = Math.floor(y / ROW_HEIGHT)
-    const commit = displayCommits[index]
-    if (!commit) return
+    if (!displayCommits[index]) return
 
-    try {
-      const detail =
-        repoSource === 'github'
-          ? await fetchGitHubCommitDetail(repoPath, commit.hash)
-          : await fetchCommitDetail(repoPath, commit.hash)
-      setSelectedCommit(detail)
-    } catch {
-      // ignore
-    }
+    setFocusedIndex(index)
+    openCommit(index)
   }
 
   if (commits.length === 0) {
@@ -235,6 +344,16 @@ export function CommitGraph() {
         className="cursor-pointer"
         style={{ height: `${displayCommits.length * ROW_HEIGHT}px`, display: 'block' }}
       />
+      {isLoadingMore && (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+        </div>
+      )}
+      {!hasMore && commits.length > PAGE_SIZE && (
+        <p className="text-center text-xs text-gray-700 py-3">
+          All {commits.length.toLocaleString()} commits loaded
+        </p>
+      )}
     </div>
   )
 }

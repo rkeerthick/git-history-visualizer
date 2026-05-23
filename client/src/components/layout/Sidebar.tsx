@@ -1,9 +1,33 @@
-import { GitBranch, Users, RotateCcw } from 'lucide-react'
+import { useState } from 'react'
+import { GitBranch, Users, RotateCcw, Loader2 } from 'lucide-react'
 import { useRepoStore } from '@/store/repoStore'
+import { fetchCommits, fetchGitHubCommits } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 export function Sidebar() {
-  const { summary, activeBranch, setActiveBranch, reset } = useRepoStore()
+  const {
+    summary, activeBranch, setActiveBranch, reset,
+    repoPath, repoSource, setCommits, setSelectedCommit, clearFilter,
+  } = useRepoStore()
+  const [loadingBranch, setLoadingBranch] = useState<string | null>(null)
+
+  async function handleBranchSelect(branchName: string) {
+    if (branchName === activeBranch || !repoPath || loadingBranch) return
+    setLoadingBranch(branchName)
+    try {
+      const commits = repoSource === 'github'
+        ? await fetchGitHubCommits(repoPath, branchName)
+        : await fetchCommits(repoPath, branchName)
+      setCommits(commits)
+      setActiveBranch(branchName)
+      setSelectedCommit(null)
+      clearFilter()
+    } catch {
+      // ignore
+    } finally {
+      setLoadingBranch(null)
+    }
+  }
 
   return (
     <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
@@ -41,18 +65,22 @@ export function Sidebar() {
               .map(branch => (
                 <li key={branch.name}>
                   <button
-                    onClick={() => setActiveBranch(branch.name)}
+                    onClick={() => handleBranchSelect(branch.name)}
+                    disabled={loadingBranch !== null}
                     className={cn(
-                      'w-full text-left px-2 py-1.5 rounded text-xs truncate transition-colors',
+                      'w-full text-left px-2 py-1.5 rounded text-xs transition-colors',
+                      'flex items-center gap-1.5 min-w-0',
                       activeBranch === branch.name
                         ? 'bg-indigo-600/20 text-indigo-300'
-                        : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                        : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200',
+                      loadingBranch !== null && 'opacity-60 cursor-not-allowed'
                     )}
                   >
-                    {branch.isCurrent && (
-                      <span className="mr-1 text-green-400">*</span>
-                    )}
-                    {branch.name}
+                    {loadingBranch === branch.name
+                      ? <Loader2 className="w-3 h-3 shrink-0 animate-spin" />
+                      : branch.isCurrent && <span className="text-green-400 shrink-0">*</span>
+                    }
+                    <span className="truncate">{branch.name}</span>
                   </button>
                 </li>
               ))}

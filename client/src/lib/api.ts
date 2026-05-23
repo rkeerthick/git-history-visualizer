@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { ApiResponse, RepoSummary, CommitNode, CommitDetail } from '@git-viz/shared'
 
-const http = axios.create({ baseURL: '/api' })
+const http = axios.create({ baseURL: (import.meta.env.VITE_API_URL as string | undefined) ?? '/api' })
 
 // ── Local git ────────────────────────────────────────────────────────────────
 

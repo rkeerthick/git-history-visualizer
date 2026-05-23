@@ -18,7 +18,7 @@ export function RepoImport() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { setRepo, setSummary, setCommits } = useRepoStore()
+  const { setRepo, setSummary, setCommits, setActiveBranch } = useRepoStore()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,6 +36,7 @@ export function RepoImport() {
         ])
         setSummary(summary)
         setCommits(commits)
+        setActiveBranch(summary.defaultBranch || 'HEAD')
         setRepo(value, 'local')
       } else {
         const [summary, commits] = await Promise.all([
@@ -44,6 +45,7 @@ export function RepoImport() {
         ])
         setSummary(summary)
         setCommits(commits)
+        setActiveBranch(summary.defaultBranch || 'HEAD')
         setRepo(value, 'github')
       }
     } catch (err) {
