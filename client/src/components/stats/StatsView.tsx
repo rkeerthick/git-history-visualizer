@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Users } from 'lucide-react'
 import { useRepoStore } from '@/store/repoStore'
 import { ContributorHeatmap } from './ContributorHeatmap'
+import { CommitsOverTime } from './CommitsOverTime'
 import { cn } from '@/lib/utils'
 
 export function StatsView() {
@@ -84,6 +85,11 @@ export function StatsView() {
             {c.author.name}
           </button>
         ))}
+      </div>
+
+      {/* Commits over time */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <CommitsOverTime commits={commits} authorEmail={selectedEmail} />
       </div>
 
       {/* Heatmap */}
