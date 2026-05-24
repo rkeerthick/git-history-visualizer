@@ -7,7 +7,9 @@ import githubRoutes from './routes/github'
 const app = express()
 const PORT = process.env.PORT ?? 3002
 
-const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',')
+const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim().replace(/\/$/, ''))
 app.use(cors({ origin: corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins }))
 app.use(express.json())
 
