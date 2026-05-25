@@ -12,8 +12,10 @@ import type { RepoSource } from '@/store/repoStore'
 
 type Tab = RepoSource
 
+const isRemoteServer = !!import.meta.env.VITE_API_URL
+
 export function RepoImport() {
-  const [tab, setTab] = useState<Tab>('local')
+  const [tab, setTab] = useState<Tab>(isRemoteServer ? 'github' : 'local')
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,10 +78,12 @@ export function RepoImport() {
 
         {/* Tab switcher */}
         <div className="flex rounded-lg bg-gray-900 border border-gray-800 p-1 gap-1">
-          <TabBtn active={tab === 'local'} onClick={() => { setTab('local'); setError(null) }}>
-            <FolderOpen className="w-3.5 h-3.5" />
-            Local path
-          </TabBtn>
+          {!isRemoteServer && (
+            <TabBtn active={tab === 'local'} onClick={() => { setTab('local'); setError(null) }}>
+              <FolderOpen className="w-3.5 h-3.5" />
+              Local path
+            </TabBtn>
+          )}
           <TabBtn active={tab === 'github'} onClick={() => { setTab('github'); setError(null) }}>
             <Github className="w-3.5 h-3.5" />
             GitHub URL
