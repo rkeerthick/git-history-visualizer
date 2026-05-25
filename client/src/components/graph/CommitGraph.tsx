@@ -204,6 +204,14 @@ export function CommitGraph() {
     const container = containerRef.current
     if (!canvas || !container || displayCommits.length === 0) return
 
+    let cancelled = false
+    document.fonts.ready.then(() => {
+      if (cancelled) return
+      draw()
+    })
+    return () => { cancelled = true }
+
+    function draw() {
     const laneMap = assignLanes(displayCommits)
     const maxLane = Math.max(0, ...displayCommits.map(c => laneMap.get(c.hash) ?? 0))
     const graphWidth = (maxLane + 1) * LANE_WIDTH + 16
@@ -292,7 +300,7 @@ export function CommitGraph() {
       // Commit message (after pills)
       ctx.fillStyle = '#9ca3af'
       ctx.font = '400 11px "JetBrains Mono", monospace'
-      const maxMsgWidth = canvas.width - refX - 20
+      const maxMsgWidth = cssWidth - refX - 20
       if (maxMsgWidth > 40) {
         let msg = commit.message
         if (ctx.measureText(msg).width > maxMsgWidth) {
@@ -311,6 +319,7 @@ export function CommitGraph() {
       ctx.fillStyle = '#4b5563'
       ctx.fillText(formatRelativeDate(commit.timestamp), textX + 64, cy + 12)
     })
+    } // end draw()
   }, [displayCommits, selectedCommit, focusedIndex])
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
