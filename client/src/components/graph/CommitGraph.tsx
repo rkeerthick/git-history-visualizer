@@ -208,13 +208,20 @@ export function CommitGraph() {
     const maxLane = Math.max(0, ...displayCommits.map(c => laneMap.get(c.hash) ?? 0))
     const graphWidth = (maxLane + 1) * LANE_WIDTH + 16
 
-    canvas.width = container.clientWidth
-    canvas.height = displayCommits.length * ROW_HEIGHT
+    const dpr = window.devicePixelRatio || 1
+    const cssWidth = container.clientWidth
+    const cssHeight = displayCommits.length * ROW_HEIGHT
+
+    canvas.width = cssWidth * dpr
+    canvas.height = cssHeight * dpr
+    canvas.style.width = `${cssWidth}px`
+    canvas.style.height = `${cssHeight}px`
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.scale(dpr, dpr)
+    ctx.clearRect(0, 0, cssWidth, cssHeight)
 
     displayCommits.forEach((commit, i) => {
       const lane = laneMap.get(commit.hash) ?? 0
@@ -342,7 +349,7 @@ export function CommitGraph() {
         ref={canvasRef}
         onClick={handleClick}
         className="cursor-pointer"
-        style={{ height: `${displayCommits.length * ROW_HEIGHT}px`, display: 'block' }}
+        style={{ display: 'block' }}
       />
       {isLoadingMore && (
         <div className="flex items-center justify-center py-4">
